@@ -1,0 +1,48 @@
+{
+  "name": "env-manager",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/main.cjs",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm build:main && pnpm build:renderer && pnpm build:css",
+    "build:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main.cjs",
+    "build:renderer": "esbuild src/renderer/index.tsx --bundle --outfile=dist/renderer.js",
+    "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/app.css",
+    "start": "pnpm build && electron .",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.23.0",
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@tailwindcss/cli": "^4.1.17",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.6",
+    "@types/react-dom": "^19.2.3",
+    "electron": "^39.2.3",
+    "esbuild": "^0.27.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
