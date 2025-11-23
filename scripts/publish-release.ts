@@ -29,18 +29,38 @@ try {
     process.exit(1)
   }
 } catch {
-  console.error("Error: Could not check remote status. Make sure you have an upstream branch set.")
+  console.error(
+    "Error: Could not check remote status. Make sure you have an upstream branch set.",
+  )
   process.exit(1)
+}
+
+// Determine release channel based on branch
+const branch = run("git rev-parse --abbrev-ref HEAD")
+const isPrerelease = branch === "dev" || branch === "develop"
+
+if (isPrerelease) {
+  console.log(`Publishing BETA release from branch: ${branch}`)
+} else {
+  console.log(`Publishing STABLE release from branch: ${branch}`)
 }
 
 console.log("Building and publishing release...")
 
 try {
-  execSync("pnpm build && electron-builder --publish always", {
+  const publishCmd = isPrerelease
+    ? "pnpm build && electron-builder --publish always -c.publish.releaseType=prerelease"
+    : "pnpm build && electron-builder --publish always"
+
+  execSync(publishCmd, {
     stdio: "inherit",
     cwd: process.cwd(),
+    env: {
+      ...process.env,
+      EP_PRE_RELEASE: isPrerelease ? "true" : "false",
+    },
   })
-  console.log("Release published successfully!")
+  console.log(`${isPrerelease ? "Beta" : "Stable"} release published successfully!`)
 } catch (error) {
   console.error("Failed to publish release:", error)
   process.exit(1)
