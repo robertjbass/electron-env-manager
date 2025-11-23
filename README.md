@@ -1,5 +1,9 @@
 # electron-env-manager
 
 
-## Name Ideas:
+## Name Ideas
 - Envy
+
+
+
+## Flow:

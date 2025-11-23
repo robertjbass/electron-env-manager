@@ -8,7 +8,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder",
+    "package": "pnpm build && electron-builder",
+    "publish-release": "tsx --env-file=.env scripts/publish-release.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
@@ -36,6 +37,7 @@
     "globals": "^16.5.0",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.17",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.47.0",
     "vite": "^7.2.4"
@@ -46,9 +48,11 @@
     ]
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.6"
   },
   "build": {
     "appId": "com.envmanager.app",
@@ -56,6 +60,12 @@
     "icon": "resources/icon.png",
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "robertjbass",
+      "repo": "electron-env-manager",
+      "releaseType": "release"
     },
     "mac": {
       "target": [

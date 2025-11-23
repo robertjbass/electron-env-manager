@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from "electron"
 import { join } from "path"
 import { is } from "@electron-toolkit/utils"
+import { autoUpdater } from "electron-updater"
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -25,7 +26,14 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+
+  // Check for updates in production
+  if (!is.dev) {
+    autoUpdater.checkForUpdatesAndNotify()
+  }
+})
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
