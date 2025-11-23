@@ -1,22 +1,14 @@
-import { useState } from "react"
+import { EnvVarList } from "@/renderer/components/EnvVarList"
 
 export function MainView() {
-  const [count, setCount] = useState(0)
-
   return (
-    <div className="min-h-screen bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-      <div className="text-center text-white">
-        <h1 className="text-5xl font-bold mb-2">Env Manager</h1>
-        <p className="text-xl opacity-90 mb-6">
-          Env Manager is running on Electron + React
-        </p>
-        <button
-          onClick={() => setCount((c) => c + 1)}
-          className="px-6 py-3 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          Count: {count}
-        </button>
+    <div className="min-h-screen bg-gray-900 p-6">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white mb-1">Env Manager</h1>
+        <p className="text-gray-400">Manage your environment variables</p>
+        <p className="text-gray-500 text-sm mt-1">Tip: Paste multiple lines at once to import them</p>
       </div>
+      <EnvVarList />
     </div>
   )
 }

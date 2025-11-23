@@ -1,5 +1,6 @@
-import { contextBridge } from "electron"
+import { contextBridge, webUtils } from "electron"
 
 contextBridge.exposeInMainWorld("electron", {
-  // Add any APIs you want to expose to the renderer here
+  // Get the full file path from a dropped file
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 })

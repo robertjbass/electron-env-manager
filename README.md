@@ -1,5 +1,37 @@
 # electron-env-manager
 
+A desktop application for managing environment variables with a modern UI.
+
+## Features
+
+### Three View Modes
+
+- **Table View** - Interactive table for editing environment variables with:
+  - Toggle between variable and comment types
+  - Enable/disable individual variables
+  - Show/hide secret values (password masking)
+  - Duplicate key detection (highlights when same key appears multiple times)
+  - Drag-and-drop reordering of entries
+  - One-click copy to clipboard for values
+
+- **Raw View** - Monaco editor with shell syntax highlighting for direct `.env` file editing
+
+- **JSON View** - Read-only Monaco editor showing full entry metadata (id, type, key, value, enabled status)
+
+### File Handling
+
+- **Drag & Drop** - Drop `.env` files directly onto the app to load them
+- **File Path Display** - Shows the full path of the loaded file
+- **Multi-line Paste** - Paste multiple environment variables at once to bulk import
+
+### Planned Features
+
+- File linking (browse and select files)
+- Save/Load functionality
+- Real-time `.env` file sync
+- Database persistence
+- GitHub integration
+
 
 ## Name Ideas
 - Envy

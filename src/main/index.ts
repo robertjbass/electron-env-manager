@@ -8,9 +8,10 @@ function createWindow(): void {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(__dirname, "../preload/index.mjs"),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false, // Required for webUtils.getPathForFile
     },
   })
 
