@@ -46,12 +46,14 @@
     ]
   },
   "dependencies": {
+    "lucide-react": "^0.554.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "build": {
     "appId": "com.envmanager.app",
     "productName": "Env Manager",
+    "icon": "resources/icon.png",
     "directories": {
       "output": "release"
     },
