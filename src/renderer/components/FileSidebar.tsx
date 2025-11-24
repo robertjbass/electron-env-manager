@@ -166,11 +166,11 @@ export function FileSidebar() {
               }`}
               onClick={() => setActiveFile(file.id)}
             >
-              <FileText size={14} className="flex-shrink-0 text-gray-500" />
+              <FileText size={14} className="shrink-0 text-gray-500" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   {file.isDirty && (
-                    <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
                   )}
                   <span className="text-sm truncate" title={file.name}>
                     {file.name}
