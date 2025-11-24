@@ -7,6 +7,7 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
+    show: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       nodeIntegration: false,
@@ -14,6 +15,9 @@ function createWindow(): void {
       sandbox: false, // Required for webUtils.getPathForFile
     },
   })
+
+  win.maximize()
+  win.show()
 
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
