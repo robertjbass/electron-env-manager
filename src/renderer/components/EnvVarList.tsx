@@ -4,6 +4,8 @@ import Editor, { loader } from "@monaco-editor/react"
 import type { EnvEntry, ViewMode } from "@/renderer/types/env"
 import { Toast } from "@/renderer/components/Toast"
 import { Tooltip } from "@/renderer/components/Tooltip"
+import { useAppContext } from "@/renderer/context/AppContext"
+import { parseEnvString, parseEnvFile } from "@/renderer/utils/envParser"
 
 // Configure Monaco to work in Electron by using the CDN
 loader.config({
@@ -14,97 +16,6 @@ loader.config({
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
-}
-
-function parseEnvString(raw: string): EnvEntry[] {
-  // Trim leading/trailing blank lines but preserve internal ones
-  const allLines = raw.split("\n")
-  let start = 0
-  let end = allLines.length - 1
-  while (start <= end && !allLines[start].trim()) start++
-  while (end >= start && !allLines[end].trim()) end--
-  const lines = allLines.slice(start, end + 1)
-
-  const entries: EnvEntry[] = []
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-
-    // Blank lines become empty comments
-    if (!trimmed) {
-      entries.push({
-        id: generateId(),
-        type: "comment",
-        key: "",
-        value: "",
-        enabled: true,
-      })
-      continue
-    }
-
-    // Check if it's a commented-out variable (e.g., #KEY=value or # KEY=value)
-    if (trimmed.startsWith("#")) {
-      const afterHash = trimmed.substring(1).trim()
-      const eqIndex = afterHash.indexOf("=")
-
-      if (eqIndex > 0) {
-        const key = afterHash.substring(0, eqIndex).trim()
-        // Check if it looks like a variable (not just a comment)
-        if (/^[A-Z_][A-Z0-9_]*$/i.test(key)) {
-          let value = afterHash.substring(eqIndex + 1).trim()
-          if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-          ) {
-            value = value.slice(1, -1)
-          }
-          entries.push({
-            id: generateId(),
-            type: "variable",
-            key,
-            value,
-            enabled: false,
-          })
-          continue
-        }
-      }
-      // It's a regular comment
-      entries.push({
-        id: generateId(),
-        type: "comment",
-        key: afterHash,
-        value: "",
-        enabled: true,
-      })
-      continue
-    }
-
-    // Regular variable
-    const eqIndex = trimmed.indexOf("=")
-    if (eqIndex === -1) continue
-
-    const key = trimmed.substring(0, eqIndex).trim()
-    let value = trimmed.substring(eqIndex + 1).trim()
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-
-    if (key) {
-      entries.push({
-        id: generateId(),
-        type: "variable",
-        key,
-        value,
-        enabled: true,
-      })
-    }
-  }
-
-  return entries
 }
 
 function isEnvFormat(text: string): boolean {
@@ -239,7 +150,7 @@ function EnvVarRow({
   }
 
   const isDisabled = !entry.enabled
-  const inputBaseClass = `flex-1 px-3 py-2 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 font-mono text-sm ${
+  const inputBaseClass = `px-3 py-2 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 font-mono text-sm ${
     isDisabled ? "bg-gray-800 text-gray-500" : "bg-gray-700 text-white"
   }`
 
@@ -287,15 +198,17 @@ function EnvVarRow({
           className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900"
         />
       </Tooltip>
-      <input
-        type="text"
-        value={entry.key}
-        onChange={(e) => onUpdate(entry.id, { key: e.target.value })}
-        placeholder="VARIABLE_NAME"
-        className={keyInputClass}
-      />
+      <div className="flex-1">
+        <input
+          type="text"
+          value={entry.key}
+          onChange={(e) => onUpdate(entry.id, { key: e.target.value })}
+          placeholder="VARIABLE_NAME"
+          className={`w-full ${keyInputClass}`}
+        />
+      </div>
       <span className={isDisabled ? "text-gray-600" : "text-gray-400"}>=</span>
-      <div className="flex-2 relative flex items-center">
+      <div className="flex-1 relative flex items-center">
         <Tooltip text={copied ? "Copied!" : "Copy value"}>
           <button
             type="button"
@@ -342,14 +255,30 @@ function createEmptyEntry(): EnvEntry {
 }
 
 export function EnvVarList() {
-  const [entries, setEntries] = useState<EnvEntry[]>([createEmptyEntry()])
+  const { getActiveFile, updateFileEntries } = useAppContext()
+  const activeFile = getActiveFile()
+
+  const [localEntries, setLocalEntries] = useState<EnvEntry[]>([createEmptyEntry()])
   const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [rawText, setRawText] = useState("")
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const dragItemId = useRef<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
-  const [filePath, setFilePath] = useState<string | null>(null)
+  const [localFilePath] = useState<string | null>(null)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
+
+  // Sync entries from active file
+  const entries = activeFile ? activeFile.entries : localEntries
+  const filePath = activeFile ? activeFile.path : localFilePath
+
+  const setEntries = useCallback((updater: EnvEntry[] | ((prev: EnvEntry[]) => EnvEntry[])) => {
+    if (activeFile) {
+      const newEntries = typeof updater === "function" ? updater(activeFile.entries) : updater
+      updateFileEntries(activeFile.id, newEntries)
+    } else {
+      setLocalEntries(updater)
+    }
+  }, [activeFile, updateFileEntries])
 
   const handleDragStart = useCallback((id: string) => {
     dragItemId.current = id
@@ -399,38 +328,30 @@ export function EnvVarList() {
     e.stopPropagation()
     setIsFileDragOver(false)
 
-    const files = e.dataTransfer.files
-    if (files.length === 0) return
+    const droppedFiles = e.dataTransfer.files
+    if (droppedFiles.length === 0) return
 
-    const file = files[0]
-    // Use Electron's webUtils API exposed via preload to get the full path
-    const electronApi = (window as { electron?: { getPathForFile?: (file: File) => string } }).electron
-    let fullPath: string | null = null
+    let totalEntries = 0
 
-    if (electronApi?.getPathForFile) {
-      try {
-        fullPath = electronApi.getPathForFile(file)
-      } catch (err) {
-        console.error("Failed to get file path:", err)
-      }
-    } else {
-      console.warn("electron.getPathForFile not available")
-    }
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      if (content) {
-        const parsed = parseEnvString(content)
+    Array.from(droppedFiles).forEach((file) => {
+      parseEnvFile(file, (parsed) => {
         if (parsed.length > 0) {
-          setEntries(parsed)
-          setFilePath(fullPath)
-          setToastMessage(`Loaded ${parsed.length} entry(s) from ${file.name}`)
+          // Merge into current entries
+          setEntries((prev) => {
+            const hasContent = prev.some(
+              (e) => e.type === "comment" || e.key.trim() || e.value.trim()
+            )
+            if (hasContent) {
+              return [...prev, ...parsed]
+            }
+            return parsed
+          })
+          totalEntries += parsed.length
+          setToastMessage(`Added ${totalEntries} variable(s) from ${droppedFiles.length} file(s)`)
         }
-      }
-    }
-    reader.readAsText(file)
-  }, [])
+      })
+    })
+  }, [setEntries])
 
   const handleUpdate = useCallback(
     (id: string, updates: Partial<EnvEntry>) => {
@@ -438,7 +359,7 @@ export function EnvVarList() {
         prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
       )
     },
-    []
+    [setEntries]
   )
 
   const handlePaste = useCallback((e: ClipboardEvent) => {
@@ -558,7 +479,7 @@ export function EnvVarList() {
 
   return (
     <div
-      className={`w-full max-w-3xl mx-auto ${isFileDragOver ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-900 rounded-lg" : ""}`}
+      className={`w-full h-full p-6 ${isFileDragOver ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-gray-900 rounded-lg" : ""}`}
       onDragOver={handleFileDragOver}
       onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}

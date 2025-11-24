@@ -1,6 +1,6 @@
 {
   "name": "env-manager",
-  "version": "0.0.1",
+  "version": "0.1.0-beta.1",
   "description": "A cross-platform environment manager",
   "main": "./out/main/index.js",
   "type": "module",
