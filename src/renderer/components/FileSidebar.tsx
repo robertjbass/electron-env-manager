@@ -36,14 +36,14 @@ export function FileSidebar() {
     let addedCount = 0
 
     Array.from(droppedFiles).forEach((file) => {
-      parseEnvFile(file, (parsed, fullPath) => {
+      parseEnvFile(file, async (parsed, fullPath) => {
         const filePath = fullPath || file.name
         const alreadyLoaded = files.some((f) => f.path === filePath)
 
         if (alreadyLoaded) {
           duplicates.push(file.name)
         } else if (parsed.length > 0) {
-          addFile(filePath, file.name, parsed)
+          await addFile(filePath, file.name, parsed)
           addedCount++
         }
 
