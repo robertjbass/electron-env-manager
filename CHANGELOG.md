@@ -1,3 +1,11 @@
+# [0.2.0-beta.1](https://github.com/robertjbass/electron-env-manager/compare/v0.1.0...v0.2.0-beta.1) (2025-11-25)
+
+
+### Features
+
+* add stateful storage with data.temp.json persistence ([e26c333](https://github.com/robertjbass/electron-env-manager/commit/e26c3335ced2969e3fafaea3bbc55d69c5a1e1d1))
+* implement file system read functionality and enhance storage loading ([f795a65](https://github.com/robertjbass/electron-env-manager/commit/f795a658d280913f29df6fcfa0d9e9fefc7a9a30))
+
 # [0.1.0](https://github.com/robertjbass/electron-env-manager/compare/v0.0.1...v0.1.0) (2025-11-24)
 
 
