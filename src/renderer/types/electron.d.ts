@@ -1,18 +1,31 @@
-export type LinkedEnvironment = {
-  projectName: string
-  envName: string
+import type {
+  LinkedEnvironment,
+  AppStorageData,
+  SaveDialogOptions,
+  OpenDialogOptions,
+  FileDialogResult,
+} from "../../shared/types"
+
+// Re-export for convenience
+export type { LinkedEnvironment, AppStorageData }
+
+export type FileChangeEvent = {
   filepath: string
-  isOpen: boolean
+  eventType: string
 }
 
-export type AppStorageData = {
-  currentView: string | null
-  linkedEnvironments: LinkedEnvironment[]
-}
+export type FileChangeCallback = (event: FileChangeEvent) => void
 
 export type ElectronAPI = {
   getPathForFile: (file: File) => string
   readFile: (filepath: string) => Promise<string>
+  writeFile: (filepath: string, content: string) => Promise<boolean>
+  fileExists: (filepath: string) => Promise<boolean>
+  getFileInfo: (filepath: string) => Promise<{ name: string; directory: string }>
+  showSaveDialog: (options: SaveDialogOptions) => Promise<FileDialogResult>
+  showOpenDialog: (options: OpenDialogOptions) => Promise<FileDialogResult>
+  watchFile: (filepath: string, callback: FileChangeCallback) => Promise<boolean>
+  unwatchFile: (filepath: string) => Promise<boolean>
   storage: {
     read: () => Promise<AppStorageData>
     write: (data: AppStorageData) => Promise<boolean>

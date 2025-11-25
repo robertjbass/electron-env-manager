@@ -1,16 +1,7 @@
-export type LinkedEnvironment = {
-  projectName: string
-  envName: string
-  filepath: string
-  isOpen: boolean
-}
+// Re-export shared types for backward compatibility
+export type { LinkedEnvironment, AppStorageData } from "../../shared/types"
 
-export type AppStorageData = {
-  currentView: string | null
-  linkedEnvironments: LinkedEnvironment[]
-}
-
-export const DEFAULT_STORAGE_DATA: AppStorageData = {
+export const DEFAULT_STORAGE_DATA = {
   currentView: null,
   linkedEnvironments: [],
-}
+} as const

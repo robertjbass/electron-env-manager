@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell, ipcMain } from "electron"
 import { join } from "path"
-import { readFileSync } from "fs"
 import { is } from "@electron-toolkit/utils"
 import { autoUpdater } from "electron-updater"
 import {
@@ -14,14 +13,65 @@ import {
   removeLinkedEnvironment,
   setEnvironmentOpen,
   clearStorage,
-  type AppStorageData,
-  type LinkedEnvironment,
 } from "./db"
+import {
+  readFile,
+  writeFile,
+  fileExists,
+  getFileInfo,
+  showSaveDialog,
+  showOpenDialog,
+  watchFile,
+  unwatchFile,
+  unwatchAllFiles,
+} from "./fileOperations"
+import type {
+  AppStorageData,
+  LinkedEnvironment,
+  SaveDialogOptions,
+  OpenDialogOptions,
+} from "../shared/types"
+
+let mainWindow: BrowserWindow | null = null
 
 function setupStorageHandlers(): void {
   // File operations
   ipcMain.handle("fs:readFile", (_event, filepath: string): string => {
-    return readFileSync(filepath, "utf-8")
+    return readFile(filepath)
+  })
+
+  ipcMain.handle("fs:writeFile", (_event, filepath: string, content: string): boolean => {
+    return writeFile(filepath, content)
+  })
+
+  ipcMain.handle("fs:exists", (_event, filepath: string): boolean => {
+    return fileExists(filepath)
+  })
+
+  ipcMain.handle("fs:getFileInfo", (_event, filepath: string): { name: string; directory: string } => {
+    return getFileInfo(filepath)
+  })
+
+  ipcMain.handle("fs:showSaveDialog", async (_event, options: SaveDialogOptions) => {
+    return showSaveDialog(options)
+  })
+
+  ipcMain.handle("fs:showOpenDialog", async (_event, options: OpenDialogOptions) => {
+    return showOpenDialog(options)
+  })
+
+  // File watching
+  ipcMain.handle("fs:watchFile", (_event, filepath: string): boolean => {
+    return watchFile(filepath, (eventType) => {
+      // Send event to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("fs:fileChanged", { filepath, eventType })
+      }
+    })
+  })
+
+  ipcMain.handle("fs:unwatchFile", (_event, filepath: string): boolean => {
+    return unwatchFile(filepath)
   })
 
   // Read/Write entire storage
@@ -75,7 +125,7 @@ function setupStorageHandlers(): void {
 }
 
 function createWindow(): void {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     show: false,
@@ -87,18 +137,18 @@ function createWindow(): void {
     },
   })
 
-  win.maximize()
-  win.show()
+  mainWindow.maximize()
+  mainWindow.show()
 
-  win.webContents.setWindowOpenHandler((details) => {
+  mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: "deny" }
   })
 
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-    win.loadURL(process.env["ELECTRON_RENDERER_URL"])
+    mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"])
   } else {
-    win.loadFile(join(__dirname, "../renderer/index.html"))
+    mainWindow.loadFile(join(__dirname, "../renderer/index.html"))
   }
 }
 
@@ -115,6 +165,7 @@ app.whenReady().then(() => {
 })
 
 app.on("window-all-closed", () => {
+  unwatchAllFiles()
   if (process.platform !== "darwin") {
     app.quit()
   }

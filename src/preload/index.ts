@@ -1,23 +1,66 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
+import type {
+  LinkedEnvironment,
+  AppStorageData,
+  SaveDialogOptions,
+  OpenDialogOptions,
+  FileDialogResult,
+} from "../shared/types"
 
-export type LinkedEnvironment = {
-  projectName: string
-  envName: string
+// Re-export types for convenience
+export type { LinkedEnvironment, AppStorageData }
+
+type FileChangeEvent = {
   filepath: string
-  isOpen: boolean
+  eventType: string
 }
 
-export type AppStorageData = {
-  currentView: string | null
-  linkedEnvironments: LinkedEnvironment[]
-}
+type FileChangeCallback = (event: FileChangeEvent) => void
+
+// Store callbacks for file change events
+const fileChangeCallbacks = new Map<string, FileChangeCallback>()
+
+// Listen for file change events from main process
+ipcRenderer.on("fs:fileChanged", (_event, data: FileChangeEvent) => {
+  const callback = fileChangeCallbacks.get(data.filepath)
+  if (callback) {
+    callback(data)
+  }
+})
 
 contextBridge.exposeInMainWorld("electron", {
   // Get the full file path from a dropped file
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 
   // File system API
-  readFile: (filepath: string): Promise<string> => ipcRenderer.invoke("fs:readFile", filepath),
+  readFile: (filepath: string): Promise<string> =>
+    ipcRenderer.invoke("fs:readFile", filepath),
+
+  writeFile: (filepath: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke("fs:writeFile", filepath, content),
+
+  fileExists: (filepath: string): Promise<boolean> =>
+    ipcRenderer.invoke("fs:exists", filepath),
+
+  getFileInfo: (filepath: string): Promise<{ name: string; directory: string }> =>
+    ipcRenderer.invoke("fs:getFileInfo", filepath),
+
+  showSaveDialog: (options: SaveDialogOptions): Promise<FileDialogResult> =>
+    ipcRenderer.invoke("fs:showSaveDialog", options),
+
+  showOpenDialog: (options: OpenDialogOptions): Promise<FileDialogResult> =>
+    ipcRenderer.invoke("fs:showOpenDialog", options),
+
+  // File watching
+  watchFile: (filepath: string, callback: FileChangeCallback): Promise<boolean> => {
+    fileChangeCallbacks.set(filepath, callback)
+    return ipcRenderer.invoke("fs:watchFile", filepath)
+  },
+
+  unwatchFile: (filepath: string): Promise<boolean> => {
+    fileChangeCallbacks.delete(filepath)
+    return ipcRenderer.invoke("fs:unwatchFile", filepath)
+  },
 
   // Storage API
   storage: {

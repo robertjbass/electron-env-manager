@@ -1,14 +1,34 @@
-import { useState, useCallback } from "react"
-import { FileText, X, ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { FileText, X, ChevronLeft, ChevronRight, Plus, Pencil, Check, FolderOpen } from "lucide-react"
 import { useAppContext } from "@/renderer/context/AppContext"
 import { parseEnvFile } from "@/renderer/utils/envParser"
 import { Toast } from "@/renderer/components/Toast"
+import { Tooltip } from "@/renderer/components/Tooltip"
 
 export function FileSidebar() {
-  const { state, setActiveFile, removeFile, toggleSidebar, addFile } = useAppContext()
+  const {
+    state,
+    setActiveFile,
+    removeFile,
+    toggleSidebar,
+    addFile,
+    importFile,
+    renameFile,
+  } = useAppContext()
   const { files, activeFileId, sidebarCollapsed } = state
   const [isDragOver, setIsDragOver] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingFileId && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editingFileId])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -57,6 +77,39 @@ export function FileSidebar() {
     })
   }, [addFile, files])
 
+  const handleImportClick = async () => {
+    const id = await importFile()
+    if (id) {
+      setToastMessage("File imported")
+    }
+  }
+
+  const startRename = (fileId: string, currentName: string, displayName?: string) => {
+    setEditingFileId(fileId)
+    setEditName(displayName || currentName)
+  }
+
+  const confirmRename = async () => {
+    if (editingFileId && editName.trim()) {
+      await renameFile(editingFileId, editName.trim())
+    }
+    setEditingFileId(null)
+    setEditName("")
+  }
+
+  const cancelRename = () => {
+    setEditingFileId(null)
+    setEditName("")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      confirmRename()
+    } else if (e.key === "Escape") {
+      cancelRename()
+    }
+  }
+
   const dropZoneClass = isDragOver
     ? "ring-2 ring-indigo-500 ring-inset bg-indigo-500/10"
     : ""
@@ -77,11 +130,21 @@ export function FileSidebar() {
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
               Open Files
             </span>
+            <Tooltip text="Import file">
+              <button
+                type="button"
+                onClick={handleImportClick}
+                className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+              >
+                <FolderOpen size={16} />
+              </button>
+            </Tooltip>
           </div>
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center text-gray-500 text-sm">
               <Plus size={24} className="mx-auto mb-2 opacity-50" />
               <p>Drop .env files here</p>
+              <p className="mt-1 text-xs text-gray-600">or click the folder icon</p>
             </div>
           </div>
         </div>
@@ -120,7 +183,7 @@ export function FileSidebar() {
                     ? "bg-gray-700 text-white"
                     : "text-gray-400 hover:text-white hover:bg-gray-800"
                 }`}
-                title={file.name}
+                title={file.displayName || file.name}
               >
                 <FileText size={16} />
               </button>
@@ -146,14 +209,25 @@ export function FileSidebar() {
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Open Files
           </span>
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <Tooltip text="Import file">
+              <button
+                type="button"
+                onClick={handleImportClick}
+                className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+              >
+                <FolderOpen size={16} />
+              </button>
+            </Tooltip>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto py-1">
           {files.map((file) => (
@@ -164,36 +238,83 @@ export function FileSidebar() {
                   ? "bg-gray-700 text-white"
                   : "text-gray-300 hover:bg-gray-800"
               }`}
-              onClick={() => setActiveFile(file.id)}
+              onClick={() => {
+                if (editingFileId !== file.id) {
+                  setActiveFile(file.id)
+                }
+              }}
             >
               <FileText size={14} className="shrink-0 text-gray-500" />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  {file.isDirty && (
-                    <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                  )}
-                  <span className="text-sm truncate" title={file.name}>
-                    {file.name}
-                  </span>
-                </div>
-                <span
-                  className="text-xs text-gray-500 truncate block"
-                  title={file.path}
-                >
-                  {getDirectoryPath(file.path)}
-                </span>
+                {editingFileId === file.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onBlur={confirmRename}
+                      className="flex-1 px-1 py-0.5 text-sm bg-gray-800 border border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        confirmRename()
+                      }}
+                      className="p-0.5 text-green-400 hover:text-green-300"
+                    >
+                      <Check size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1">
+                      {file.isDirty && (
+                        <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                      )}
+                      <span className="text-sm truncate" title={file.displayName || file.name}>
+                        {file.displayName || file.name}
+                      </span>
+                    </div>
+                    <span
+                      className="text-xs text-gray-500 truncate block"
+                      title={file.path}
+                    >
+                      {getDirectoryPath(file.path)}
+                    </span>
+                  </>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeFile(file.id)
-                }}
-                className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                title="Close file"
-              >
-                <X size={14} />
-              </button>
+              {editingFileId !== file.id && (
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                  <Tooltip text="Rename">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startRename(file.id, file.name, file.displayName)
+                      }}
+                      className="p-1 text-gray-500 hover:text-blue-400"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </Tooltip>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeFile(file.id)
+                    }}
+                    className="p-1 text-gray-500 hover:text-red-400"
+                    title="Close file"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

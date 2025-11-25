@@ -1,7 +1,8 @@
 import { app } from "electron"
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
-import { AppStorageData, LinkedEnvironment, DEFAULT_STORAGE_DATA } from "./types"
+import type { AppStorageData, LinkedEnvironment } from "../../shared/types"
+import { DEFAULT_STORAGE_DATA } from "./types"
 
 const STORAGE_FILE_NAME = "data.temp.json"
 

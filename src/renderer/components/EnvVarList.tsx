@@ -4,8 +4,10 @@ import Editor, { loader } from "@monaco-editor/react"
 import type { EnvEntry, ViewMode } from "@/renderer/types/env"
 import { Toast } from "@/renderer/components/Toast"
 import { Tooltip } from "@/renderer/components/Tooltip"
+import { FileActions } from "@/renderer/components/FileActions"
 import { useAppContext } from "@/renderer/context/AppContext"
 import { parseEnvString, parseEnvFile } from "@/renderer/utils/envParser"
+import { entriesToEnvString } from "@/renderer/utils/fileFormatter"
 
 // Configure Monaco to work in Electron by using the CDN
 loader.config({
@@ -40,22 +42,6 @@ function stripOuterQuotes(text: string): string {
     return text.slice(1, -1)
   }
   return text
-}
-
-function entriesToEnvString(entries: EnvEntry[]): string {
-  return entries
-    .filter((e) => e.type === "comment" || e.key.trim())
-    .map((e) => {
-      if (e.type === "comment") {
-        // Empty comments become blank lines
-        return e.key ? `# ${e.key}` : ""
-      }
-      const needsQuotes = e.value.includes(" ") || e.value.includes("\n")
-      const value = needsQuotes ? `"${e.value}"` : e.value
-      const line = `${e.key}=${value}`
-      return e.enabled ? line : `#${line}`
-    })
-    .join("\n")
 }
 
 type EnvVarRowProps = {
@@ -255,7 +241,7 @@ function createEmptyEntry(): EnvEntry {
 }
 
 export function EnvVarList() {
-  const { getActiveFile, updateFileEntries } = useAppContext()
+  const { getActiveFile, updateFileEntries, saveFile } = useAppContext()
   const activeFile = getActiveFile()
 
   const [localEntries, setLocalEntries] = useState<EnvEntry[]>([createEmptyEntry()])
@@ -279,6 +265,22 @@ export function EnvVarList() {
       setLocalEntries(updater)
     }
   }, [activeFile, updateFileEntries])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault()
+        if (activeFile) {
+          const success = await saveFile(activeFile.id)
+          setToastMessage(success ? "File saved" : "Failed to save file")
+        }
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [activeFile, saveFile])
 
   const handleDragStart = useCallback((id: string) => {
     dragItemId.current = id
@@ -306,7 +308,7 @@ export function EnvVarList() {
     }
     dragItemId.current = null
     setDragOverId(null)
-  }, [dragOverId])
+  }, [dragOverId, setEntries])
 
   // File drop handlers
   const handleFileDragOver = useCallback((e: React.DragEvent) => {
@@ -417,7 +419,7 @@ export function EnvVarList() {
         }
       }
     }
-  }, [])
+  }, [setEntries])
 
   useEffect(() => {
     document.addEventListener("paste", handlePaste)
@@ -484,24 +486,23 @@ export function EnvVarList() {
       onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}
     >
-      {/* File path display */}
-      <div className="flex items-center gap-2 mb-3 text-sm">
-        <FileIcon size={14} className="text-gray-500" />
-        {filePath ? (
-          <span className="text-gray-400 font-mono truncate" title={filePath}>
-            {filePath}
-          </span>
-        ) : (
-          <span className="text-gray-600 italic">No associated file</span>
-        )}
-        {/*
-          TODO: Future Features
-          - File linking: Allow users to browse and select a file to link
-          - Save/Load functionality: Save current entries to file, load from file
-          - .env file realtime sync: Watch file for changes and auto-reload
-          - Global save to database: Persist entries across sessions
-          - Connect to GitHub: Sync .env files with GitHub repositories
-        */}
+      {/* File path and actions toolbar */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 text-sm min-w-0 flex-1">
+          <FileIcon size={14} className="text-gray-500 shrink-0" />
+          {filePath ? (
+            <span className="text-gray-400 font-mono truncate" title={filePath}>
+              {filePath}
+            </span>
+          ) : (
+            <span className="text-gray-600 italic">No associated file</span>
+          )}
+        </div>
+        <FileActions
+          fileId={activeFile?.id || null}
+          isDirty={activeFile?.isDirty || false}
+          hasPath={!!filePath}
+        />
       </div>
 
       <div className="flex items-center justify-between mb-4">

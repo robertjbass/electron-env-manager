@@ -2,13 +2,16 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import type { EnvEntry } from "@/renderer/types/env"
 import type { LinkedEnvironment } from "@/renderer/types/electron"
 import { parseEnvString } from "@/renderer/utils/envParser"
+import { entriesToEnvString, formatEntries, getExtensionForFormat, type ExportFormat } from "@/renderer/utils/fileFormatter"
 
 type LoadedFile = {
   id: string
   path: string
   name: string
+  displayName?: string
   entries: EnvEntry[]
   isDirty: boolean
+  originalContent?: string // Track original content for sync detection
 }
 
 type AppState = {
@@ -19,19 +22,28 @@ type AppState = {
 
 type AppContextValue = {
   state: AppState
-  addFile: (path: string, name: string, entries: EnvEntry[]) => Promise<string>
+  addFile: (path: string, name: string, entries: EnvEntry[], displayName?: string) => Promise<string>
   removeFile: (id: string) => Promise<void>
   setActiveFile: (id: string | null) => void
   updateFileEntries: (id: string, entries: EnvEntry[]) => void
   markFileDirty: (id: string, isDirty: boolean) => void
   toggleSidebar: () => void
   getActiveFile: () => LoadedFile | null
+  // File operations
+  saveFile: (id: string) => Promise<boolean>
+  saveFileAs: (id: string, format?: ExportFormat) => Promise<boolean>
+  exportFile: (id: string, format: ExportFormat) => Promise<boolean>
+  reloadFile: (id: string) => Promise<boolean>
+  importFile: () => Promise<string | null>
+  syncFileFromDisk: (id: string) => Promise<{ changed: boolean; content?: string }>
   // Storage methods
   linkedEnvironments: LinkedEnvironment[]
   addLinkedEnvironment: (env: LinkedEnvironment) => Promise<void>
   removeLinkedEnvironment: (filepath: string) => Promise<void>
   updateLinkedEnvironment: (filepath: string, updates: Partial<LinkedEnvironment>) => Promise<void>
   loadLinkedEnvironments: () => Promise<void>
+  // Rename
+  renameFile: (id: string, newDisplayName: string) => Promise<void>
 }
 
 const initialState: AppState = {
@@ -74,8 +86,10 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
               id: generateId(),
               path: env.filepath,
               name: env.envName,
+              displayName: env.displayName,
               entries,
               isDirty: false,
+              originalContent: content,
             })
           } catch (error) {
             console.error(`Failed to load file ${env.filepath}:`, error)
@@ -110,11 +124,13 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const addFile = useCallback(async (path: string, name: string, entries: EnvEntry[]): Promise<string> => {
+  const addFile = useCallback(async (path: string, name: string, entries: EnvEntry[], displayName?: string): Promise<string> => {
     const id = generateId()
+    const content = entriesToEnvString(entries)
+
     setState((prev) => ({
       ...prev,
-      files: [...prev.files, { id, path, name, entries, isDirty: false }],
+      files: [...prev.files, { id, path, name, displayName, entries, isDirty: false, originalContent: content }],
       activeFileId: id,
     }))
 
@@ -123,6 +139,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       await window.electron.storage.addLinkedEnvironment({
         projectName: name.replace(/\.env.*$/, ""), // Extract project name from file name
         envName: name,
+        displayName,
         filepath: path,
         isOpen: true,
       })
@@ -186,6 +203,208 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     return state.files.find((f) => f.id === state.activeFileId) || null
   }, [state.files, state.activeFileId])
 
+  // File operations
+  const saveFile = useCallback(async (id: string): Promise<boolean> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file || !file.path) return false
+
+    try {
+      const content = entriesToEnvString(file.entries)
+      const success = await window.electron.writeFile(file.path, content)
+
+      if (success) {
+        setState((prev) => ({
+          ...prev,
+          files: prev.files.map((f) =>
+            f.id === id ? { ...f, isDirty: false, originalContent: content } : f
+          ),
+        }))
+      }
+
+      return success
+    } catch (error) {
+      console.error("Failed to save file:", error)
+      return false
+    }
+  }, [state.files])
+
+  const saveFileAs = useCallback(async (id: string, format: ExportFormat = "env"): Promise<boolean> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file) return false
+
+    try {
+      const extension = getExtensionForFormat(format)
+      const result = await window.electron.showSaveDialog({
+        title: "Save As",
+        defaultPath: file.path || `environment.${extension}`,
+        filters: [
+          { name: "Environment Files", extensions: ["env"] },
+          { name: "JSON Files", extensions: ["json"] },
+          { name: "Shell Scripts", extensions: ["sh"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      })
+
+      if (result.canceled || !result.filePath) return false
+
+      const content = formatEntries(file.entries, format)
+      const success = await window.electron.writeFile(result.filePath, content)
+
+      if (success && format === "env") {
+        // Update the file path if saved as env
+        const fileInfo = await window.electron.getFileInfo(result.filePath)
+        setState((prev) => ({
+          ...prev,
+          files: prev.files.map((f) =>
+            f.id === id ? {
+              ...f,
+              path: result.filePath!,
+              name: fileInfo.name,
+              isDirty: false,
+              originalContent: content
+            } : f
+          ),
+        }))
+
+        // Update linked environment
+        await window.electron.storage.addLinkedEnvironment({
+          projectName: fileInfo.name.replace(/\.env.*$/, ""),
+          envName: fileInfo.name,
+          displayName: file.displayName,
+          filepath: result.filePath,
+          isOpen: true,
+        })
+        await loadLinkedEnvironments()
+      }
+
+      return success
+    } catch (error) {
+      console.error("Failed to save file as:", error)
+      return false
+    }
+  }, [state.files, loadLinkedEnvironments])
+
+  const exportFile = useCallback(async (id: string, format: ExportFormat): Promise<boolean> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file) return false
+
+    try {
+      const extension = getExtensionForFormat(format)
+      const baseName = file.name.replace(/\.[^/.]+$/, "")
+
+      const result = await window.electron.showSaveDialog({
+        title: `Export as ${format.toUpperCase()}`,
+        defaultPath: `${baseName}.${extension}`,
+        filters: [
+          { name: `${format.toUpperCase()} Files`, extensions: [extension] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      })
+
+      if (result.canceled || !result.filePath) return false
+
+      const content = formatEntries(file.entries, format)
+      return await window.electron.writeFile(result.filePath, content)
+    } catch (error) {
+      console.error("Failed to export file:", error)
+      return false
+    }
+  }, [state.files])
+
+  const reloadFile = useCallback(async (id: string): Promise<boolean> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file || !file.path) return false
+
+    try {
+      const content = await window.electron.readFile(file.path)
+      const entries = parseEnvString(content)
+
+      setState((prev) => ({
+        ...prev,
+        files: prev.files.map((f) =>
+          f.id === id ? { ...f, entries, isDirty: false, originalContent: content } : f
+        ),
+      }))
+
+      return true
+    } catch (error) {
+      console.error("Failed to reload file:", error)
+      return false
+    }
+  }, [state.files])
+
+  const importFile = useCallback(async (): Promise<string | null> => {
+    try {
+      const result = await window.electron.showOpenDialog({
+        title: "Import Environment File",
+        filters: [
+          { name: "Environment Files", extensions: ["env", "local", "development", "production", "test", "staging"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+        properties: ["openFile"],
+      })
+
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return null
+      }
+
+      const filePath = result.filePaths[0]
+
+      // Check if already loaded
+      const existingFile = state.files.find((f) => f.path === filePath)
+      if (existingFile) {
+        setActiveFile(existingFile.id)
+        return existingFile.id
+      }
+
+      const content = await window.electron.readFile(filePath)
+      const entries = parseEnvString(content)
+      const fileInfo = await window.electron.getFileInfo(filePath)
+
+      return await addFile(filePath, fileInfo.name, entries)
+    } catch (error) {
+      console.error("Failed to import file:", error)
+      return null
+    }
+  }, [state.files, addFile, setActiveFile])
+
+  const syncFileFromDisk = useCallback(async (id: string): Promise<{ changed: boolean; content?: string }> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file || !file.path) return { changed: false }
+
+    try {
+      const content = await window.electron.readFile(file.path)
+      const changed = content !== file.originalContent
+      return { changed, content }
+    } catch (error) {
+      console.error("Failed to check file sync:", error)
+      return { changed: false }
+    }
+  }, [state.files])
+
+  // Rename file display name
+  const renameFile = useCallback(async (id: string, newDisplayName: string) => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file) return
+
+    setState((prev) => ({
+      ...prev,
+      files: prev.files.map((f) =>
+        f.id === id ? { ...f, displayName: newDisplayName } : f
+      ),
+    }))
+
+    // Update in storage
+    if (file.path) {
+      try {
+        await window.electron.storage.updateLinkedEnvironment(file.path, { displayName: newDisplayName })
+        await loadLinkedEnvironments()
+      } catch (error) {
+        console.error("Failed to update display name:", error)
+      }
+    }
+  }, [state.files, loadLinkedEnvironments])
+
   const addLinkedEnvironment = useCallback(async (env: LinkedEnvironment) => {
     try {
       const success = await window.electron.storage.addLinkedEnvironment(env)
@@ -243,11 +462,18 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         markFileDirty,
         toggleSidebar,
         getActiveFile,
+        saveFile,
+        saveFileAs,
+        exportFile,
+        reloadFile,
+        importFile,
+        syncFileFromDisk,
         linkedEnvironments,
         addLinkedEnvironment,
         removeLinkedEnvironment,
         updateLinkedEnvironment,
         loadLinkedEnvironments,
+        renameFile,
       }}
     >
       {children}
