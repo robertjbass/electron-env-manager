@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell, ipcMain } from "electron"
 import { join } from "path"
+import { readFileSync } from "fs"
 import { is } from "@electron-toolkit/utils"
 import { autoUpdater } from "electron-updater"
 import {
@@ -18,6 +19,11 @@ import {
 } from "./db"
 
 function setupStorageHandlers(): void {
+  // File operations
+  ipcMain.handle("fs:readFile", (_event, filepath: string): string => {
+    return readFileSync(filepath, "utf-8")
+  })
+
   // Read/Write entire storage
   ipcMain.handle("storage:read", (): AppStorageData => {
     return readStorage()

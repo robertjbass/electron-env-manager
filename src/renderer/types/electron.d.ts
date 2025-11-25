@@ -12,6 +12,7 @@ export type AppStorageData = {
 
 export type ElectronAPI = {
   getPathForFile: (file: File) => string
+  readFile: (filepath: string) => Promise<string>
   storage: {
     read: () => Promise<AppStorageData>
     write: (data: AppStorageData) => Promise<boolean>

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import type { EnvEntry } from "@/renderer/types/env"
 import type { LinkedEnvironment } from "@/renderer/types/electron"
+import { parseEnvString } from "@/renderer/utils/envParser"
 
 type LoadedFile = {
   id: string
@@ -49,17 +50,64 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState)
   const [linkedEnvironments, setLinkedEnvironments] = useState<LinkedEnvironment[]>([])
 
-  // Load linked environments on mount
+  // Load linked environments and restore open files on mount
   useEffect(() => {
     const loadStorage = async () => {
       try {
         const environments = await window.electron.storage.getLinkedEnvironments()
         setLinkedEnvironments(environments)
+
+        // Restore open files
+        const openEnvironments = environments.filter((env) => env.isOpen)
+        if (openEnvironments.length === 0) return
+
+        const loadedFiles: LoadedFile[] = []
+
+        for (const env of openEnvironments) {
+          try {
+            // Read the file from disk
+            const content = await window.electron.readFile(env.filepath)
+            // Parse it
+            const entries = parseEnvString(content)
+
+            loadedFiles.push({
+              id: generateId(),
+              path: env.filepath,
+              name: env.envName,
+              entries,
+              isDirty: false,
+            })
+          } catch (error) {
+            console.error(`Failed to load file ${env.filepath}:`, error)
+          }
+        }
+
+        if (loadedFiles.length > 0) {
+          // Get the last active view
+          const currentView = await window.electron.storage.getCurrentView()
+          const activeFile = loadedFiles.find((f) => f.path === currentView) || loadedFiles[0]
+
+          setState((prev) => ({
+            ...prev,
+            files: loadedFiles,
+            activeFileId: activeFile.id,
+          }))
+        }
       } catch (error) {
         console.error("Failed to load linked environments:", error)
       }
     }
     loadStorage()
+  }, [])
+
+  // Storage methods - defined first since other callbacks depend on them
+  const loadLinkedEnvironments = useCallback(async () => {
+    try {
+      const environments = await window.electron.storage.getLinkedEnvironments()
+      setLinkedEnvironments(environments)
+    } catch (error) {
+      console.error("Failed to load linked environments:", error)
+    }
   }, [])
 
   const addFile = useCallback(async (path: string, name: string, entries: EnvEntry[]): Promise<string> => {
@@ -137,16 +185,6 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const getActiveFile = useCallback((): LoadedFile | null => {
     return state.files.find((f) => f.id === state.activeFileId) || null
   }, [state.files, state.activeFileId])
-
-  // Storage methods
-  const loadLinkedEnvironments = useCallback(async () => {
-    try {
-      const environments = await window.electron.storage.getLinkedEnvironments()
-      setLinkedEnvironments(environments)
-    } catch (error) {
-      console.error("Failed to load linked environments:", error)
-    }
-  }, [])
 
   const addLinkedEnvironment = useCallback(async (env: LinkedEnvironment) => {
     try {

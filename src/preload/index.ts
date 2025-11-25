@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("electron", {
   // Get the full file path from a dropped file
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 
+  // File system API
+  readFile: (filepath: string): Promise<string> => ipcRenderer.invoke("fs:readFile", filepath),
+
   // Storage API
   storage: {
     read: (): Promise<AppStorageData> => ipcRenderer.invoke("storage:read"),
