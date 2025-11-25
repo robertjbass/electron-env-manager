@@ -1,7 +1,78 @@
-import { app, BrowserWindow, shell } from "electron"
+import { app, BrowserWindow, shell, ipcMain } from "electron"
 import { join } from "path"
+import { readFileSync } from "fs"
 import { is } from "@electron-toolkit/utils"
 import { autoUpdater } from "electron-updater"
+import {
+  readStorage,
+  writeStorage,
+  getCurrentView,
+  setCurrentView,
+  getLinkedEnvironments,
+  addLinkedEnvironment,
+  updateLinkedEnvironment,
+  removeLinkedEnvironment,
+  setEnvironmentOpen,
+  clearStorage,
+  type AppStorageData,
+  type LinkedEnvironment,
+} from "./db"
+
+function setupStorageHandlers(): void {
+  // File operations
+  ipcMain.handle("fs:readFile", (_event, filepath: string): string => {
+    return readFileSync(filepath, "utf-8")
+  })
+
+  // Read/Write entire storage
+  ipcMain.handle("storage:read", (): AppStorageData => {
+    return readStorage()
+  })
+
+  ipcMain.handle("storage:write", (_event, data: AppStorageData): boolean => {
+    return writeStorage(data)
+  })
+
+  // Current view operations
+  ipcMain.handle("storage:getCurrentView", (): string | null => {
+    return getCurrentView()
+  })
+
+  ipcMain.handle("storage:setCurrentView", (_event, view: string | null): boolean => {
+    return setCurrentView(view)
+  })
+
+  // Linked environments operations
+  ipcMain.handle("storage:getLinkedEnvironments", (): LinkedEnvironment[] => {
+    return getLinkedEnvironments()
+  })
+
+  ipcMain.handle("storage:addLinkedEnvironment", (_event, env: LinkedEnvironment): boolean => {
+    return addLinkedEnvironment(env)
+  })
+
+  ipcMain.handle(
+    "storage:updateLinkedEnvironment",
+    (_event, filepath: string, updates: Partial<LinkedEnvironment>): boolean => {
+      return updateLinkedEnvironment(filepath, updates)
+    }
+  )
+
+  ipcMain.handle("storage:removeLinkedEnvironment", (_event, filepath: string): boolean => {
+    return removeLinkedEnvironment(filepath)
+  })
+
+  ipcMain.handle(
+    "storage:setEnvironmentOpen",
+    (_event, filepath: string, isOpen: boolean): boolean => {
+      return setEnvironmentOpen(filepath, isOpen)
+    }
+  )
+
+  ipcMain.handle("storage:clear", (): boolean => {
+    return clearStorage()
+  })
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -32,6 +103,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Register IPC handlers for storage
+  setupStorageHandlers()
+
   createWindow()
 
   // Check for updates in production
