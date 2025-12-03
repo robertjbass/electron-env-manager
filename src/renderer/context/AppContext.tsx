@@ -35,6 +35,7 @@ type AppContextValue = {
   exportFile: (id: string, format: ExportFormat) => Promise<boolean>
   reloadFile: (id: string) => Promise<boolean>
   importFile: () => Promise<string | null>
+  cloneFile: (id: string) => Promise<string | null>
   syncFileFromDisk: (id: string) => Promise<{ changed: boolean; content?: string }>
   // Storage methods
   linkedEnvironments: LinkedEnvironment[]
@@ -368,6 +369,46 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     }
   }, [state.files, addFile, setActiveFile])
 
+  // Clone/duplicate an environment file
+  const cloneFile = useCallback(async (id: string): Promise<string | null> => {
+    const file = state.files.find((f) => f.id === id)
+    if (!file) return null
+
+    try {
+      // Generate suggested filename
+      const baseName = file.name.replace(/\.env/, "")
+      const suggestedName = file.path
+        ? file.path.replace(file.name, `${baseName}.copy.env`)
+        : `${baseName}.copy.env`
+
+      const result = await window.electron.showSaveDialog({
+        title: "Clone Environment File",
+        defaultPath: suggestedName,
+        filters: [
+          { name: "Environment Files", extensions: ["env"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      })
+
+      if (result.canceled || !result.filePath) return null
+
+      // Write the cloned content
+      const content = entriesToEnvString(file.entries)
+      const success = await window.electron.writeFile(result.filePath, content)
+
+      if (!success) return null
+
+      // Load the cloned file
+      const fileInfo = await window.electron.getFileInfo(result.filePath)
+      const clonedEntries = file.entries.map((e) => ({ ...e, id: generateId() }))
+
+      return await addFile(result.filePath, fileInfo.name, clonedEntries)
+    } catch (error) {
+      console.error("Failed to clone file:", error)
+      return null
+    }
+  }, [state.files, addFile])
+
   const syncFileFromDisk = useCallback(async (id: string): Promise<{ changed: boolean; content?: string }> => {
     const file = state.files.find((f) => f.id === id)
     if (!file || !file.path) return { changed: false }
@@ -467,6 +508,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         exportFile,
         reloadFile,
         importFile,
+        cloneFile,
         syncFileFromDisk,
         linkedEnvironments,
         addLinkedEnvironment,

@@ -1,16 +1,27 @@
 import { app } from "electron"
-import { existsSync, readFileSync, writeFileSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
 import { join } from "path"
 import type { AppStorageData, LinkedEnvironment } from "../../shared/types"
 import { DEFAULT_STORAGE_DATA } from "./types"
 
-const STORAGE_FILE_NAME = "data.temp.json"
+const CONFIG_DIR_NAME = ".env-manager"
+const CONFIG_FILE_NAME = "config.json"
+
+function getConfigDir(): string {
+  // Store in ~/.env-manager/ for easy access and visibility
+  const homeDir = app.getPath("home")
+  return join(homeDir, CONFIG_DIR_NAME)
+}
 
 function getStoragePath(): string {
-  // Use app.getPath('userData') for proper cross-platform storage
-  // Falls back to app root in development
-  const userDataPath = app.getPath("userData")
-  return join(userDataPath, STORAGE_FILE_NAME)
+  return join(getConfigDir(), CONFIG_FILE_NAME)
+}
+
+function ensureConfigDir(): void {
+  const configDir = getConfigDir()
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true })
+  }
 }
 
 export function readStorage(): AppStorageData {
@@ -33,9 +44,9 @@ export function readStorage(): AppStorageData {
 }
 
 export function writeStorage(data: AppStorageData): boolean {
-  const storagePath = getStoragePath()
-
   try {
+    ensureConfigDir()
+    const storagePath = getStoragePath()
     writeFileSync(storagePath, JSON.stringify(data, null, 2), "utf-8")
     return true
   } catch {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react"
-import { FileText, X, ChevronLeft, ChevronRight, Plus, Pencil, Check, FolderOpen } from "lucide-react"
+import { FileText, X, ChevronLeft, ChevronRight, Plus, Pencil, Check, FolderOpen, Copy } from "lucide-react"
 import { useAppContext } from "@/renderer/context/AppContext"
 import { parseEnvFile } from "@/renderer/utils/envParser"
 import { Toast } from "@/renderer/components/Toast"
@@ -14,6 +14,7 @@ export function FileSidebar() {
     addFile,
     importFile,
     renameFile,
+    cloneFile,
   } = useAppContext()
   const { files, activeFileId, sidebarCollapsed } = state
   const [isDragOver, setIsDragOver] = useState(false)
@@ -290,6 +291,21 @@ export function FileSidebar() {
               </div>
               {editingFileId !== file.id && (
                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                  <Tooltip text="Clone">
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        const id = await cloneFile(file.id)
+                        if (id) {
+                          setToastMessage("File cloned")
+                        }
+                      }}
+                      className="p-1 text-gray-500 hover:text-green-400"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </Tooltip>
                   <Tooltip text="Rename">
                     <button
                       type="button"
